@@ -5,6 +5,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
@@ -18,7 +21,7 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Create Flutter platform files
+      - name: Create Flutter Android platform
         run: flutter create --platforms=android .
 
       - name: Install Firebase CLI
@@ -27,29 +30,35 @@ jobs:
       - name: Install FlutterFire CLI
         run: dart pub global activate flutterfire_cli
 
-      - name: Configure Firebase
+      - name: Authenticate with Firebase
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
         run: |
           if [ -z "$FIREBASE_TOKEN" ]; then
-            echo "FIREBASE_TOKEN is not configured. Add it as a GitHub Actions secret."
+            echo "FIREBASE_TOKEN is not configured. Add it under GitHub Settings > Secrets and variables > Actions."
             exit 1
           fi
-          firebase login:ci --no-localhost --token "$FIREBASE_TOKEN" >/dev/null 2>&1 || true
+          firebase projects:list --token "$FIREBASE_TOKEN" >/dev/null
+
+      - name: Configure FlutterFire for Veylola
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
           export PATH="$PATH:$HOME/.pub-cache/bin"
           flutterfire configure --project=emma-f716b --platforms=android --yes
 
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Analyze
+      - name: Analyze Flutter project
         run: flutter analyze
 
       - name: Build release APK
         run: flutter build apk --release
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: veylola-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
