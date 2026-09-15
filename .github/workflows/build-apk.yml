@@ -1,0 +1,55 @@
+name: Build Veylola Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Create Flutter platform files
+        run: flutter create --platforms=android .
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Install FlutterFire CLI
+        run: dart pub global activate flutterfire_cli
+
+      - name: Configure Firebase
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          if [ -z "$FIREBASE_TOKEN" ]; then
+            echo "FIREBASE_TOKEN is not configured. Add it as a GitHub Actions secret."
+            exit 1
+          fi
+          firebase login:ci --no-localhost --token "$FIREBASE_TOKEN" >/dev/null 2>&1 || true
+          export PATH="$PATH:$HOME/.pub-cache/bin"
+          flutterfire configure --project=emma-f716b --platforms=android --yes
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: veylola-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
