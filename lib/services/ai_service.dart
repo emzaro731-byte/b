@@ -4,10 +4,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class AiService {
   final SupabaseClient _supabase = Supabase.instance.client;
 
-  Future<String> chat(String message) async {
+  Future<String> chat(String message, {String? imageData}) async {
     final response = await _supabase.functions.invoke(
       'veylola-ai',
-      body: {'type': 'chat', 'prompt': message},
+      body: {
+        'type': 'chat',
+        'prompt': message,
+        if (imageData != null) 'imageData': imageData,
+      },
     );
     final data = Map<String, dynamic>.from(response.data as Map);
     if (data['error'] != null) throw Exception(data['error'].toString());
