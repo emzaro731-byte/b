@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:speech_to_text/speech_recognition_result.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../services/ai_service.dart';
 import 'media_screen.dart';
 
@@ -16,7 +18,68 @@ class _HomeScreenState extends State<HomeScreen> {
   final _messages = <Map<String, dynamic>>[];
   final _ai = AiService();
   final List<PlatformFile> _attachments = [];
+  final stt.SpeechToText _speech = stt.SpeechToText();
   bool _busy = false;
+  bool _speechReady = false;
+  bool _listening = false;
+  String _speechBaseText = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _initSpeech();
+  }
+
+  Future<void> _initSpeech() async {
+    final available = await _speech.initialize(
+      onStatus: (status) {
+        if (!mounted) return;
+        setState(() => _listening = status == 'listening');
+      },
+      onError: (error) {
+        if (!mounted) return;
+        setState(() => _listening = false);
+        _show('Microphone error: ${error.errorMsg}');
+      },
+    );
+    if (mounted) setState(() => _speechReady = available);
+  }
+
+  Future<void> _toggleVoice() async {
+    if (_busy) return;
+    if (!_speechReady) {
+      await _initSpeech();
+      if (!_speechReady) {
+        _show('Speech recognition is not available. Check microphone permission.');
+        return;
+      }
+    }
+
+    if (_speech.isListening) {
+      await _speech.stop();
+      if (mounted) setState(() => _listening = false);
+      return;
+    }
+
+    _speechBaseText = _controller.text.trim();
+    if (_speechBaseText.isNotEmpty) _speechBaseText += ' ';
+
+    await _speech.listen(
+      onResult: _onSpeechResult,
+      listenMode: stt.ListenMode.confirmation,
+      partialResults: true,
+    );
+    if (mounted) setState(() => _listening = _speech.isListening);
+  }
+
+  void _onSpeechResult(SpeechRecognitionResult result) {
+    if (!mounted) return;
+    final spoken = result.recognizedWords.trim();
+    setState(() {
+      _controller.text = '$_speechBaseText$spoken';
+      _controller.selection = TextSelection.collapsed(offset: _controller.text.length);
+    });
+  }
 
   Future<void> _pickFiles() async {
     if (_busy) return;
@@ -98,30 +161,24 @@ class _HomeScreenState extends State<HomeScreen> {
     final text = _controller.text.trim();
     if ((text.isEmpty && _attachments.isEmpty) || _busy) return;
 
+    if (_speech.isListening) await _speech.stop();
     final payloads = _attachmentPayloads();
     final names = _attachments.map((file) => file.name).toList();
     final displayText = text.isEmpty ? 'Please analyze the attached files.' : text;
 
     setState(() {
-      _messages.add({
-        'role': 'user',
-        'text': displayText,
-        'attachments': names,
-      });
+      _messages.add({'role': 'user', 'text': displayText, 'attachments': names});
       _busy = true;
+      _listening = false;
     });
     _controller.clear();
     setState(() => _attachments.clear());
 
     try {
       final reply = await _ai.chat(displayText, attachments: payloads);
-      if (mounted) {
-        setState(() => _messages.add({'role': 'assistant', 'text': reply}));
-      }
+      if (mounted) setState(() => _messages.add({'role': 'assistant', 'text': reply}));
     } catch (e) {
-      if (mounted) {
-        setState(() => _messages.add({'role': 'assistant', 'text': 'AI request failed: $e'}));
-      }
+      if (mounted) setState(() => _messages.add({'role': 'assistant', 'text': 'AI request failed: $e'}));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -153,6 +210,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _speech.stop();
     _controller.dispose();
     super.dispose();
   }
@@ -249,14 +307,20 @@ class _HomeScreenState extends State<HomeScreen> {
                       maxLines: 5,
                       onSubmitted: (_) => _send(),
                       decoration: InputDecoration(
-                        hintText: 'Message Veylola...',
+                        hintText: _listening ? 'Listening...' : 'Message Veylola...',
                         filled: true,
                         fillColor: const Color(0xFF111111),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: _busy ? null : _toggleVoice,
+                    tooltip: _listening ? 'Stop listening' : 'Voice input',
+                    icon: Icon(_listening ? Icons.mic : Icons.mic_none),
+                    color: _listening ? Theme.of(context).colorScheme.primary : null,
+                  ),
+                  const SizedBox(width: 2),
                   IconButton.filled(
                     onPressed: _busy ? null : _send,
                     icon: _busy
