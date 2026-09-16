@@ -1,6 +1,6 @@
 import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import '../services/ai_service.dart';
 import 'media_screen.dart';
 
@@ -15,50 +15,106 @@ class _HomeScreenState extends State<HomeScreen> {
   final _controller = TextEditingController();
   final _messages = <Map<String, dynamic>>[];
   final _ai = AiService();
-  final _picker = ImagePicker();
+  final List<PlatformFile> _attachments = [];
   bool _busy = false;
-  String? _attachedImageData;
 
-  Future<void> _pickImage() async {
+  Future<void> _pickFiles() async {
     if (_busy) return;
     try {
-      final file = await _picker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 80,
-        maxWidth: 1600,
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        type: FileType.any,
+        withData: true,
       );
-      if (file == null) return;
-      final bytes = await file.readAsBytes();
-      final mime = file.mimeType ?? 'image/jpeg';
+      if (result == null || result.files.isEmpty) return;
+
+      const maxFiles = 10;
+      final selected = result.files.take(maxFiles).toList();
       setState(() {
-        _attachedImageData = 'data:$mime;base64,${base64Encode(bytes)}';
+        for (final file in selected) {
+          if (!_attachments.any((item) => item.name == file.name && item.size == file.size)) {
+            _attachments.add(file);
+          }
+        }
       });
-    } catch (e) {
-      _show('Could not select the image.');
+
+      if (result.files.length > maxFiles) {
+        _show('You can attach up to $maxFiles files at once.');
+      }
+    } catch (_) {
+      _show('Could not select the files.');
+    }
+  }
+
+  void _removeAttachment(int index) {
+    setState(() => _attachments.removeAt(index));
+  }
+
+  List<Map<String, dynamic>> _attachmentPayloads() {
+    return _attachments.map((file) {
+      final bytes = file.bytes;
+      final mime = _mimeFor(file.extension);
+      return <String, dynamic>{
+        'name': file.name,
+        'size': file.size,
+        'mimeType': mime,
+        if (bytes != null && mime.startsWith('image/'))
+          'data': 'data:$mime;base64,${base64Encode(bytes)}',
+      };
+    }).toList();
+  }
+
+  String _mimeFor(String? extension) {
+    switch ((extension ?? '').toLowerCase()) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'webp':
+        return 'image/webp';
+      case 'gif':
+        return 'image/gif';
+      case 'heic':
+        return 'image/heic';
+      case 'pdf':
+        return 'application/pdf';
+      case 'txt':
+        return 'text/plain';
+      case 'json':
+        return 'application/json';
+      case 'csv':
+        return 'text/csv';
+      case 'doc':
+        return 'application/msword';
+      case 'docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      default:
+        return 'application/octet-stream';
     }
   }
 
   Future<void> _send() async {
     final text = _controller.text.trim();
-    final image = _attachedImageData;
-    if ((text.isEmpty && image == null) || _busy) return;
+    if ((text.isEmpty && _attachments.isEmpty) || _busy) return;
+
+    final payloads = _attachmentPayloads();
+    final names = _attachments.map((file) => file.name).toList();
+    final displayText = text.isEmpty ? 'Please analyze the attached files.' : text;
 
     setState(() {
       _messages.add({
         'role': 'user',
-        'text': text.isEmpty ? 'Analyze this image' : text,
-        'image': image,
+        'text': displayText,
+        'attachments': names,
       });
       _busy = true;
-      _attachedImageData = null;
     });
     _controller.clear();
+    setState(() => _attachments.clear());
 
     try {
-      final reply = await _ai.chat(
-        text.isEmpty ? 'Analyze this image and describe what you see.' : text,
-        imageData: image,
-      );
+      final reply = await _ai.chat(displayText, attachments: payloads);
       if (mounted) {
         setState(() => _messages.add({'role': 'assistant', 'text': reply}));
       }
@@ -80,20 +136,19 @@ class _HomeScreenState extends State<HomeScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Widget _messageImage(String data) {
-    try {
-      final comma = data.indexOf(',');
-      final bytes = base64Decode(data.substring(comma + 1));
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: Image.memory(bytes, width: 230, height: 180, fit: BoxFit.cover),
-        ),
-      );
-    } catch (_) {
-      return const SizedBox.shrink();
-    }
+  Widget _attachmentPreview(List<dynamic> names) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: names.map((name) => Chip(
+          avatar: const Icon(Icons.attach_file, size: 16),
+          label: Text(name.toString(), overflow: TextOverflow.ellipsis),
+          visualDensity: VisualDensity.compact,
+        )).toList(),
+      ),
+    );
   }
 
   @override
@@ -133,7 +188,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     itemBuilder: (_, i) {
                       final m = _messages[i];
                       final user = m['role'] == 'user';
-                      final image = m['image'] as String?;
+                      final names = (m['attachments'] as List?) ?? const [];
                       return Align(
                         alignment: user ? Alignment.centerRight : Alignment.centerLeft,
                         child: Container(
@@ -141,13 +196,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           margin: const EdgeInsets.only(bottom: 12),
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: user ? Theme.of(context).colorScheme.primaryContainer : const Color(0xFF15151D),
+                            color: user ? Theme.of(context).colorScheme.primaryContainer : const Color(0xFF0A0A0A),
                             borderRadius: BorderRadius.circular(18),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              if (image != null) _messageImage(image),
+                              if (names.isNotEmpty) _attachmentPreview(names),
                               Text(m['text']?.toString() ?? ''),
                             ],
                           ),
@@ -156,34 +211,24 @@ class _HomeScreenState extends State<HomeScreen> {
                     },
                   ),
           ),
-          if (_attachedImageData != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Stack(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.memory(
-                        base64Decode(_attachedImageData!.split(',').last),
-                        width: 74,
-                        height: 74,
-                        fit: BoxFit.cover,
-                      ),
+          if (_attachments.isNotEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: List.generate(_attachments.length, (index) {
+                  final file = _attachments[index];
+                  return InputChip(
+                    avatar: const Icon(Icons.insert_drive_file, size: 17),
+                    label: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 150),
+                      child: Text(file.name, overflow: TextOverflow.ellipsis),
                     ),
-                    Positioned(
-                      right: 0,
-                      top: 0,
-                      child: IconButton(
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                        onPressed: () => setState(() => _attachedImageData = null),
-                        icon: const CircleAvatar(radius: 12, child: Icon(Icons.close, size: 15)),
-                      ),
-                    ),
-                  ],
-                ),
+                    onDeleted: () => _removeAttachment(index),
+                  );
+                }),
               ),
             ),
           SafeArea(
@@ -193,9 +238,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   IconButton(
-                    onPressed: _busy ? null : _pickImage,
-                    tooltip: 'Add image',
-                    icon: const Icon(Icons.image_outlined),
+                    onPressed: _busy ? null : _pickFiles,
+                    tooltip: 'Attach files',
+                    icon: const Icon(Icons.attach_file),
                   ),
                   Expanded(
                     child: TextField(
@@ -206,7 +251,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       decoration: InputDecoration(
                         hintText: 'Message Veylola...',
                         filled: true,
-                        fillColor: const Color(0xFF15151D),
+                        fillColor: const Color(0xFF111111),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
                       ),
                     ),
