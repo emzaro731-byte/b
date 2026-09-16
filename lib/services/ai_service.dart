@@ -4,13 +4,16 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class AiService {
   final SupabaseClient _supabase = Supabase.instance.client;
 
-  Future<String> chat(String message, {String? imageData}) async {
+  Future<String> chat(
+    String message, {
+    List<Map<String, dynamic>> attachments = const [],
+  }) async {
     final response = await _supabase.functions.invoke(
       'veylola-ai',
       body: {
         'type': 'chat',
         'prompt': message,
-        if (imageData != null) 'imageData': imageData,
+        if (attachments.isNotEmpty) 'attachments': attachments,
       },
     );
     final data = Map<String, dynamic>.from(response.data as Map);
