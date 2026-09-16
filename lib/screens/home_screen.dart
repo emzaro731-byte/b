@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/ai_service.dart';
+import 'media_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -10,7 +11,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _controller = TextEditingController();
-  final _scrollController = ScrollController();
   final _messages = <Map<String, String>>[];
   final _ai = AiService();
   bool _busy = false;
@@ -27,10 +27,14 @@ class _HomeScreenState extends State<HomeScreen> {
       final reply = await _ai.chat(text);
       if (mounted) setState(() => _messages.add({'role': 'assistant', 'text': reply}));
     } catch (e) {
-      if (mounted) setState(() => _messages.add({'role': 'assistant', 'text': 'I could not complete that request yet. Connect the Veylola AI Cloud Function and try again.'}));
+      if (mounted) setState(() => _messages.add({'role': 'assistant', 'text': 'AI request failed: $e'}));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  void _openStudio() {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MediaScreen()));
   }
 
   @override
@@ -38,15 +42,27 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Veylola AI', style: TextStyle(fontWeight: FontWeight.bold)),
-        centerTitle: false,
+        actions: [
+          IconButton(onPressed: _openStudio, tooltip: 'AI Studio', icon: const Icon(Icons.auto_awesome)),
+        ],
       ),
       body: Column(
         children: [
           Expanded(
             child: _messages.isEmpty
-                ? const Center(child: Text('Ask Veylola anything', style: TextStyle(fontSize: 20)))
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.auto_awesome, size: 64),
+                        const SizedBox(height: 12),
+                        const Text('Ask Veylola anything', style: TextStyle(fontSize: 20)),
+                        const SizedBox(height: 20),
+                        OutlinedButton.icon(onPressed: _openStudio, icon: const Icon(Icons.movie_creation_outlined), label: const Text('Open AI Studio')),
+                      ],
+                    ),
+                  )
                 : ListView.builder(
-                    controller: _scrollController,
                     padding: const EdgeInsets.all(16),
                     itemCount: _messages.length,
                     itemBuilder: (_, i) {
