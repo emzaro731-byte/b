@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../services/ai_service.dart';
 import 'media_screen.dart';
 
@@ -11,23 +13,59 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _controller = TextEditingController();
-  final _messages = <Map<String, String>>[];
+  final _messages = <Map<String, dynamic>>[];
   final _ai = AiService();
+  final _picker = ImagePicker();
   bool _busy = false;
+  String? _attachedImageData;
+
+  Future<void> _pickImage() async {
+    if (_busy) return;
+    try {
+      final file = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 80,
+        maxWidth: 1600,
+      );
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      final mime = file.mimeType ?? 'image/jpeg';
+      setState(() {
+        _attachedImageData = 'data:$mime;base64,${base64Encode(bytes)}';
+      });
+    } catch (e) {
+      _show('Could not select the image.');
+    }
+  }
 
   Future<void> _send() async {
     final text = _controller.text.trim();
-    if (text.isEmpty || _busy) return;
+    final image = _attachedImageData;
+    if ((text.isEmpty && image == null) || _busy) return;
+
     setState(() {
-      _messages.add({'role': 'user', 'text': text});
+      _messages.add({
+        'role': 'user',
+        'text': text.isEmpty ? 'Analyze this image' : text,
+        'image': image,
+      });
       _busy = true;
+      _attachedImageData = null;
     });
     _controller.clear();
+
     try {
-      final reply = await _ai.chat(text);
-      if (mounted) setState(() => _messages.add({'role': 'assistant', 'text': reply}));
+      final reply = await _ai.chat(
+        text.isEmpty ? 'Analyze this image and describe what you see.' : text,
+        imageData: image,
+      );
+      if (mounted) {
+        setState(() => _messages.add({'role': 'assistant', 'text': reply}));
+      }
     } catch (e) {
-      if (mounted) setState(() => _messages.add({'role': 'assistant', 'text': 'AI request failed: $e'}));
+      if (mounted) {
+        setState(() => _messages.add({'role': 'assistant', 'text': 'AI request failed: $e'}));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -35,6 +73,33 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _openStudio() {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MediaScreen()));
+  }
+
+  void _show(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Widget _messageImage(String data) {
+    try {
+      final comma = data.indexOf(',');
+      final bytes = base64Decode(data.substring(comma + 1));
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: Image.memory(bytes, width: 230, height: 180, fit: BoxFit.cover),
+        ),
+      );
+    } catch (_) {
+      return const SizedBox.shrink();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
@@ -68,6 +133,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     itemBuilder: (_, i) {
                       final m = _messages[i];
                       final user = m['role'] == 'user';
+                      final image = m['image'] as String?;
                       return Align(
                         alignment: user ? Alignment.centerRight : Alignment.centerLeft,
                         child: Container(
@@ -78,17 +144,59 @@ class _HomeScreenState extends State<HomeScreen> {
                             color: user ? Theme.of(context).colorScheme.primaryContainer : const Color(0xFF15151D),
                             borderRadius: BorderRadius.circular(18),
                           ),
-                          child: Text(m['text'] ?? ''),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (image != null) _messageImage(image),
+                              Text(m['text']?.toString() ?? ''),
+                            ],
+                          ),
                         ),
                       );
                     },
                   ),
           ),
+          if (_attachedImageData != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.memory(
+                        base64Decode(_attachedImageData!.split(',').last),
+                        width: 74,
+                        height: 74,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                        onPressed: () => setState(() => _attachedImageData = null),
+                        icon: const CircleAvatar(radius: 12, child: Icon(Icons.close, size: 15)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+              padding: const EdgeInsets.fromLTRB(8, 8, 12, 12),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
+                  IconButton(
+                    onPressed: _busy ? null : _pickImage,
+                    tooltip: 'Add image',
+                    icon: const Icon(Icons.image_outlined),
+                  ),
                   Expanded(
                     child: TextField(
                       controller: _controller,
@@ -106,7 +214,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(width: 8),
                   IconButton.filled(
                     onPressed: _busy ? null : _send,
-                    icon: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.arrow_upward),
+                    icon: _busy
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.arrow_upward),
                   ),
                 ],
               ),
