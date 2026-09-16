@@ -1,21 +1,42 @@
-import 'package:cloud_functions/cloud_functions.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AiService {
-  final FirebaseFunctions _functions = FirebaseFunctions.instance;
+  final SupabaseClient _supabase = Supabase.instance.client;
 
   Future<String> chat(String message) async {
-    final callable = _functions.httpsCallable('chat');
-    final result = await callable.call({'message': message});
-    final data = Map<String, dynamic>.from(result.data as Map);
-    return (data['reply'] ?? '').toString();
+    final response = await _supabase.functions.invoke(
+      'veylola-ai',
+      body: {
+        'type': 'chat',
+        'prompt': message,
+      },
+    );
+
+    final data = Map<String, dynamic>.from(response.data as Map);
+    if (data['error'] != null) {
+      throw Exception(data['error'].toString());
+    }
+    return (data['reply'] ?? data['message'] ?? '').toString();
   }
 
   Future<Map<String, dynamic>> generateMedia({
     required String type,
     required String prompt,
+    Map<String, dynamic> options = const {},
   }) async {
-    final callable = _functions.httpsCallable('generateMedia');
-    final result = await callable.call({'type': type, 'prompt': prompt});
-    return Map<String, dynamic>.from(result.data as Map);
+    final response = await _supabase.functions.invoke(
+      'veylola-ai',
+      body: {
+        'type': type,
+        'prompt': prompt,
+        'options': options,
+      },
+    );
+
+    final data = Map<String, dynamic>.from(response.data as Map);
+    if (data['error'] != null) {
+      throw Exception(data['error'].toString());
+    }
+    return data;
   }
 }
