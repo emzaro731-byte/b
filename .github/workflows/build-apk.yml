@@ -1,4 +1,4 @@
-name: Build Veylola Android APK
+name: Build Veylola Android APK and AAB
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  build-apk:
+  build-android:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -35,7 +35,7 @@ jobs:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
         run: |
           if [ -z "$FIREBASE_TOKEN" ]; then
-            echo "FIREBASE_TOKEN is not configured. Add it under GitHub Settings > Secrets and variables > Actions."
+            echo "FIREBASE_TOKEN is not configured."
             exit 1
           fi
           firebase projects:list --token "$FIREBASE_TOKEN" >/dev/null
@@ -56,9 +56,19 @@ jobs:
       - name: Build release APK
         run: flutter build apk --release
 
-      - name: Upload APK artifact
+      - name: Build release AAB
+        run: flutter build appbundle --release
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: veylola-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+      - name: Upload AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: veylola-release-aab
+          path: build/app/outputs/bundle/release/app-release.aab
           if-no-files-found: error
