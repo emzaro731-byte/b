@@ -1,13 +1,19 @@
 import 'dart:async';
-import 'package:cloud_functions/cloud_functions.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AiService {
-  final FirebaseFunctions _functions =
-      FirebaseFunctions.instanceFor(region: 'us-central1');
+  final SupabaseClient _supabase = Supabase.instance.client;
 
   Future<Map<String, dynamic>> _call(Map<String, dynamic> body) async {
-    final callable = _functions.httpsCallable('veylolaAi');
-    final response = await callable.call(body);
+    final response = await _supabase.functions.invoke(
+      'veylola-ai',
+      body: body,
+    );
+
+    if (response.data is! Map) {
+      throw Exception('Veylola AI returned an invalid response.');
+    }
+
     final data = Map<String, dynamic>.from(response.data as Map);
     if (data['error'] != null) {
       throw Exception(data['error'].toString());
@@ -15,7 +21,10 @@ class AiService {
     return data;
   }
 
-  Future<String> chat(String message, {List<Map<String, dynamic>> attachments = const []}) async {
+  Future<String> chat(
+    String message, {
+    List<Map<String, dynamic>> attachments = const [],
+  }) async {
     final data = await _call({
       'type': 'chat',
       'prompt': message,
@@ -48,7 +57,9 @@ class AiService {
     final deadline = DateTime.now().add(timeout);
     while (DateTime.now().isBefore(deadline)) {
       final result = await getMediaStatus(type: type, taskId: taskId);
-      final data = Map<String, dynamic>.from(result['data'] is Map ? result['data'] : result);
+      final data = Map<String, dynamic>.from(
+        result['data'] is Map ? result['data'] : result,
+      );
       final state = (data['state'] ?? data['status'] ?? '').toString().toLowerCase();
       final success = state == 'success' || state == 'complete' || state == 'first_success';
       final failed = state == 'fail' || state == 'failed' || state.contains('failed') || state.contains('error');
@@ -60,15 +71,21 @@ class AiService {
 
   List<String> extractResultUrls(Map<String, dynamic> result) {
     final urls = <String>[];
+
     void scan(dynamic value) {
       if (value is String && (value.startsWith('http://') || value.startsWith('https://'))) {
         if (!urls.contains(value)) urls.add(value);
       } else if (value is Map) {
-        for (final entry in value.entries) scan(entry.value);
+        for (final entry in value.entries) {
+          scan(entry.value);
+        }
       } else if (value is List) {
-        for (final item in value) scan(item);
+        for (final item in value) {
+          scan(item);
+        }
       }
     }
+
     scan(result);
     return urls;
   }
