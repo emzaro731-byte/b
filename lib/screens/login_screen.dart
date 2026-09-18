@@ -1,5 +1,5 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -35,31 +35,24 @@ class _LoginScreenState extends State<LoginScreen> {
       _show('Password must be at least 6 characters.');
       return;
     }
+
     setState(() => _loading = true);
     try {
       if (_signUp) {
-        await _authService.signUpWithEmail(email, password);
-        _show('Account created successfully.');
+        final response = await _authService.signUpWithEmail(email, password);
+        if (!mounted) return;
+        _show(
+          response.session == null
+              ? 'Account created. Check your email to verify it.'
+              : 'Account created successfully.',
+        );
       } else {
         await _authService.signInWithEmail(email, password);
       }
-    } on FirebaseAuthException catch (e) {
-      _show(e.message ?? 'Authentication failed.');
+    } on AuthException catch (e) {
+      _show(e.message);
     } catch (_) {
       _show('Something went wrong. Please try again.');
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _googleLogin() async {
-    setState(() => _loading = true);
-    try {
-      await _authService.signInWithGoogle();
-    } on FirebaseAuthException catch (e) {
-      _show(e.message ?? 'Google sign-in failed.');
-    } catch (_) {
-      _show('Google sign-in was cancelled or failed.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -74,8 +67,10 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       await _authService.resetPassword(email);
       _show('Password reset email sent.');
-    } on FirebaseAuthException catch (e) {
-      _show(e.message ?? 'Could not send reset email.');
+    } on AuthException catch (e) {
+      _show(e.message);
+    } catch (_) {
+      _show('Could not send reset email.');
     }
   }
 
@@ -101,7 +96,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 10),
-                Text(_signUp ? 'Sign up with email or Google' : 'Sign in to continue'),
+                Text(_signUp ? 'Create an account with email' : 'Sign in to continue'),
                 const SizedBox(height: 28),
                 TextField(
                   controller: _email,
@@ -142,23 +137,21 @@ class _LoginScreenState extends State<LoginScreen> {
                   height: 52,
                   child: FilledButton(
                     onPressed: _loading ? null : _emailAuth,
-                    child: Text(_loading ? 'Please wait...' : (_signUp ? 'Create account' : 'Sign in with email')),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: OutlinedButton.icon(
-                    onPressed: _loading ? null : _googleLogin,
-                    icon: const Icon(Icons.g_mobiledata, size: 30),
-                    label: const Text('Continue with Google'),
+                    child: Text(
+                      _loading
+                          ? 'Please wait...'
+                          : (_signUp ? 'Create account' : 'Sign in'),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 18),
                 TextButton(
                   onPressed: _loading ? null : () => setState(() => _signUp = !_signUp),
-                  child: Text(_signUp ? 'Already have an account? Sign in' : 'New to Veylola? Create an account'),
+                  child: Text(
+                    _signUp
+                        ? 'Already have an account? Sign in'
+                        : 'New to Veylola? Create an account',
+                  ),
                 ),
               ],
             ),
