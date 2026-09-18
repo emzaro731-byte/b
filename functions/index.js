@@ -33,6 +33,14 @@ exports.veylolaAi = onCall({ timeoutSeconds: 540 }, async (request) => {
     data = { error: text || 'AI provider returned an invalid response.' };
   }
 
+  if (response.ok && !data?.error && body.type === 'chat' && request.auth.uid) {
+    await admin.firestore().collection('users').doc(request.auth.uid).collection('conversations').add({
+      userMessage: String(body.prompt || body.message || ''),
+      assistantMessage: String(data.reply || data.message || ''),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+
   if (!response.ok || data?.error) {
     logger.error('Supabase AI proxy failed', {
       status: response.status,
