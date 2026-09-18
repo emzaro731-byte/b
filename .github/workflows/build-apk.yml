@@ -55,6 +55,14 @@ jobs:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
         run: firebase deploy --only functions --project emma-f716b --token "$FIREBASE_TOKEN"
 
+      - name: Remove old Firebase AI provider secrets
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          for SECRET in GROQ_API_KEY KIE_API_KEY KIE_API_URL; do
+            firebase functions:secrets:destroy "$SECRET" --project emma-f716b --token "$FIREBASE_TOKEN" --force || true
+          done
+
       - name: Analyze Flutter project
         run: flutter analyze
 
