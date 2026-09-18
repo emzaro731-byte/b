@@ -11,7 +11,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
   final _subscriptions = SubscriptionService();
   bool _loading = true;
   bool _premium = false;
-  static const _selarCheckoutUrl = 'https://selar.co/REPLACE_WITH_YOUR_PRODUCT';
+  static const _selarCheckoutUrl = 'https://selar.com/84z189877t';
 
   @override void initState() { super.initState(); _refresh(); }
 
@@ -27,9 +27,9 @@ class _PremiumScreenState extends State<PremiumScreen> {
 
   Future<void> _subscribe() async {
     final uri = Uri.tryParse(_selarCheckoutUrl);
-    if (uri == null || uri.path.contains('REPLACE_WITH_YOUR_PRODUCT')) {
+    if (uri == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Add your Selar checkout link first.')),
+        const SnackBar(content: Text('Selar checkout link is invalid.')),
       );
       return;
     }
