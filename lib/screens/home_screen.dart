@@ -221,6 +221,7 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Veylola AI', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
+          IconButton(onPressed: () => Navigator.of(context).pushNamed('/premium'), tooltip: 'Premium', icon: const Icon(Icons.workspace_premium)),
           IconButton(onPressed: _openStudio, tooltip: 'AI Studio', icon: const Icon(Icons.auto_awesome)),
         ],
       ),
@@ -236,6 +237,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(height: 12),
                         const Text('Ask Veylola anything', style: TextStyle(fontSize: 20)),
                         const SizedBox(height: 20),
+                        OutlinedButton.icon(onPressed: () => Navigator.of(context).pushNamed('/premium'), icon: const Icon(Icons.workspace_premium), label: const Text('Get Premium')),
+                        const SizedBox(height: 10),
                         OutlinedButton.icon(onPressed: _openStudio, icon: const Icon(Icons.movie_creation_outlined), label: const Text('Open AI Studio')),
                       ],
                     ),
