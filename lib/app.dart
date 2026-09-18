@@ -1,8 +1,7 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
-import 'services/auth_service.dart';
 
 class VeylolaApp extends StatelessWidget {
   const VeylolaApp({super.key});
@@ -68,17 +67,17 @@ class AuthGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
+    return StreamBuilder<AuthState>(
+      stream: Supabase.instance.client.auth.onAuthStateChange,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        final session = Supabase.instance.client.auth.currentSession;
+        if (snapshot.connectionState == ConnectionState.waiting && session == null) {
           return const Scaffold(
             backgroundColor: Colors.black,
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        if (snapshot.data == null) return const LoginScreen();
-        return const HomeScreen();
+        return session == null ? const LoginScreen() : const HomeScreen();
       },
     );
   }
@@ -92,7 +91,7 @@ class AccountButton extends StatelessWidget {
     return IconButton(
       tooltip: 'Sign out',
       icon: const Icon(Icons.logout),
-      onPressed: () => AuthService().signOut(),
+      onPressed: () => Supabase.instance.client.auth.signOut(),
     );
   }
 }
