@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/premium_screen.dart';
 
 class VeylolaApp extends StatelessWidget {
   const VeylolaApp({super.key});
@@ -58,6 +59,9 @@ class VeylolaApp extends StatelessWidget {
         ),
       ),
       home: const AuthGate(),
+      routes: {
+        '/premium': (_) => const PremiumScreen(),
+      },
     );
   }
 }
