@@ -1,23 +1,26 @@
 import 'dart:async';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class AiService {
-  final SupabaseClient _supabase = Supabase.instance.client;
+  final FirebaseFunctions _functions =
+      FirebaseFunctions.instanceFor(region: 'us-central1');
 
-  Future<String> chat(
-    String message, {
-    List<Map<String, dynamic>> attachments = const [],
-  }) async {
-    final response = await _supabase.functions.invoke(
-      'veylola-ai',
-      body: {
-        'type': 'chat',
-        'prompt': message,
-        if (attachments.isNotEmpty) 'attachments': attachments,
-      },
-    );
+  Future<Map<String, dynamic>> _call(Map<String, dynamic> body) async {
+    final callable = _functions.httpsCallable('veylolaAi');
+    final response = await callable.call(body);
     final data = Map<String, dynamic>.from(response.data as Map);
-    if (data['error'] != null) throw Exception(data['error'].toString());
+    if (data['error'] != null) {
+      throw Exception(data['error'].toString());
+    }
+    return data;
+  }
+
+  Future<String> chat(String message, {List<Map<String, dynamic>> attachments = const []}) async {
+    final data = await _call({
+      'type': 'chat',
+      'prompt': message,
+      if (attachments.isNotEmpty) 'attachments': attachments,
+    });
     return (data['reply'] ?? data['message'] ?? '').toString();
   }
 
@@ -25,27 +28,15 @@ class AiService {
     required String type,
     required String prompt,
     Map<String, dynamic> options = const {},
-  }) async {
-    final response = await _supabase.functions.invoke(
-      'veylola-ai',
-      body: {'type': type, 'prompt': prompt, 'options': options},
-    );
-    final data = Map<String, dynamic>.from(response.data as Map);
-    if (data['error'] != null) throw Exception(data['error'].toString());
-    return data;
+  }) {
+    return _call({'type': type, 'prompt': prompt, 'options': options});
   }
 
   Future<Map<String, dynamic>> getMediaStatus({
     required String type,
     required String taskId,
-  }) async {
-    final response = await _supabase.functions.invoke(
-      'veylola-ai',
-      body: {'type': 'status', 'taskId': taskId, 'mediaType': type},
-    );
-    final data = Map<String, dynamic>.from(response.data as Map);
-    if (data['error'] != null) throw Exception(data['error'].toString());
-    return data;
+  }) {
+    return _call({'type': 'status', 'taskId': taskId, 'mediaType': type});
   }
 
   Future<Map<String, dynamic>> waitForMedia({
