@@ -50,6 +50,11 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Deploy Firebase Cloud Functions
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: firebase deploy --only functions --project emma-f716b --token "$FIREBASE_TOKEN"
+
       - name: Analyze Flutter project
         run: flutter analyze
 
