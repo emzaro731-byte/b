@@ -24,6 +24,9 @@ jobs:
       - name: Create Flutter Android platform
         run: flutter create --platforms=android .
 
+      - name: Remove generated placeholder test
+        run: rm -f test/widget_test.dart
+
       - name: Install dependencies
         run: flutter pub get
 
