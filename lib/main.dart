@@ -1,14 +1,17 @@
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'firebase_options.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'app.dart';
+
+const supabaseUrl = 'https://vihbsfrwnslnmheowkhy.supabase.co';
+const supabasePublishableKey = 'sb_publishable_Rnc9vqvuULFLmtlpkw0_lQ_6xJCqkQ_';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
+
+  await Supabase.initialize(
+    url: supabaseUrl,
+    publishableKey: supabasePublishableKey,
   );
-  await GoogleSignIn.instance.initialize();
+
   runApp(const VeylolaApp());
 }
